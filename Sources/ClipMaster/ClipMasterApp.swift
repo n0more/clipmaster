@@ -16,9 +16,9 @@ struct ClipMasterApp: App {
     @StateObject private var container = RootContainer()
 
     var body: some Scene {
-        // The `isPresented` binding now correctly controls the menu's visibility.
+        // The `isInserted` binding now correctly controls the menu's visibility.
         // We access appState directly from the container.
-        MenuBarExtra("ClipMaster", systemImage: "paperclip", isPresented: $container.appState.isMenuPresented) {
+        MenuBarExtra("ClipMaster", systemImage: "paperclip", isInserted: $container.appState.isMenuPresented) {
             MenuBarView(updaterController: updaterController)
                 // Pass the entire container into the environment.
                 .environmentObject(container)
