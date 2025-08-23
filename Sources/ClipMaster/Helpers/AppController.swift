@@ -67,7 +67,6 @@ class AppController {
 
     private func createHistoryWindow() {
         let menuView = MenuBarView()
-            .environmentObject(container)
             .environmentObject(container.historyViewModel)
             .modelContainer(container.persistenceService.mainContext.container)
 

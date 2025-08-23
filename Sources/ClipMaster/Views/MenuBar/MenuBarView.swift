@@ -4,8 +4,6 @@ import SwiftData
 struct MenuBarView: View {
     @EnvironmentObject var viewModel: HistoryViewModel
     @FocusState private var isListFocused: Bool
-    
-    // We now track the index of the selected item. Default to 0 (the first item).
     @State private var selectedIndex: Int = 0
 
     var body: some View {
@@ -19,14 +17,14 @@ struct MenuBarView: View {
                     .foregroundColor(.secondary)
                     .padding()
             } else {
-                // We use a ScrollView to have full control over the content.
                 ScrollViewReader { scrollViewProxy in
                     ScrollView {
                         ForEach(Array(viewModel.clipItems.enumerated()), id: \.element.id) { index, item in
-                            ClipItemRow(item: item)
+                            // Pass the ViewModel to the row
+                            ClipItemRow(item: item, viewModel: viewModel)
                                 .background(selectedIndex == index ? Color.accentColor : Color.clear)
                                 .cornerRadius(4)
-                                .id(item.id) // ID for scrolling
+                                .id(item.id)
                         }
                     }
                     .focusable()
@@ -63,7 +61,6 @@ struct MenuBarView: View {
             return
         }
         
-        // Scroll to the newly selected item.
         let selectedId = items[selectedIndex].id
         withAnimation {
             proxy.scrollTo(selectedId, anchor: .center)
@@ -71,12 +68,14 @@ struct MenuBarView: View {
     }
 }
 
-// A new view for a single row to better manage its appearance.
+// Updated ClipItemRow to include the Ollama button
 struct ClipItemRow: View {
     let item: ClipItem
+    @ObservedObject var viewModel: HistoryViewModel // Observe the ViewModel
     
     var body: some View {
         HStack {
+            // Item content
             if item.contentType == "public.png", let image = NSImage(data: item.content) {
                 Image(nsImage: image)
                     .resizable()
@@ -88,7 +87,26 @@ struct ClipItemRow: View {
                     .truncationMode(.tail)
                     .foregroundColor(.primary)
             }
+            
             Spacer()
+            
+            // Ollama processing button
+            if item.contentType != "public.png" { // Only show for text items
+                if viewModel.isProcessingOllama {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                } else {
+                    Button(action: {
+                        // Run the async task
+                        Task {
+                            await viewModel.processWithOllama(item: item)
+                        }
+                    }) {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
     }

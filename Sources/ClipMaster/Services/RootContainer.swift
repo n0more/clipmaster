@@ -4,37 +4,33 @@ import SwiftUI
 // This container class manages the creation and lifecycle of all services and shared state.
 // It's an ObservableObject, so SwiftUI can manage its lifecycle when used with @StateObject.
 @MainActor
-class RootContainer: ObservableObject {
-    // Shared State - now published so views can react to changes if needed
-    @Published var appState: AppState
-    
-    // Services
+class RootContainer {
+    // All services and view models are initialized here.
     let persistenceService: PersistenceService
     let clipboardService: ClipboardService
     let hotKeyService: HotKeyService
-    
-    // ViewModels - also published
-    @Published var historyViewModel: HistoryViewModel
+    let ollamaService: OllamaService // New service
+    let historyViewModel: HistoryViewModel
 
     init() {
         do {
-            // 1. Create shared state first.
-            let appState = AppState()
-            self.appState = appState
-            
-            // 2. Create persistence layer.
+            // 1. Foundational services.
             self.persistenceService = try PersistenceService()
             
-            // 3. Create services.
+            // 2. Core services.
             self.clipboardService = ClipboardService(persistenceService: self.persistenceService)
             self.hotKeyService = HotKeyService()
+            self.ollamaService = OllamaService() // New service
             
-            // 4. Create view models that depend on services.
-            self.historyViewModel = HistoryViewModel(modelContext: self.persistenceService.mainContext, clipboardService: self.clipboardService)
+            // 3. View models that depend on services.
+            self.historyViewModel = HistoryViewModel(
+                modelContext: self.persistenceService.mainContext,
+                clipboardService: self.clipboardService,
+                ollamaService: self.ollamaService // Pass it to the ViewModel
+            )
             
         } catch {
-            // If any part of the initialization fails, the app cannot run.
-            fatalError("Failed to initialize the application's container: \(error)")
+            fatalError("Failed to initialize RootContainer: \(error)")
         }
     }
     
