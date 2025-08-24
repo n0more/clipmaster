@@ -4,68 +4,83 @@ import Foundation
 @MainActor
 class OllamaService {
     
-    private let url = URL(string: "http://localhost:11434/api/generate")!
+    private let generateUrl = URL(string: "http://localhost:11434/api/generate")!
+    private let tagsUrl = URL(string: "http://localhost:11434/api/tags")!
     
+    // Request/Response for the 'generate' endpoint.
     private struct OllamaRequest: Codable {
         let model: String
         let prompt: String
         let stream: Bool
+        let options: [String: Double]
     }
     
     private struct OllamaResponse: Codable {
         let response: String
     }
     
-    func generate(prompt: String) async throws -> String {
-        print("[OllamaService] Sending prompt to Ollama...")
+    // Response structure for the 'tags' endpoint.
+    private struct OllamaTagsResponse: Codable {
+        let models: [OllamaModel]
+    }
+    
+    struct OllamaModel: Codable {
+        let name: String
+    }
+    
+    // The generate function now accepts a model and temperature.
+    func generate(prompt: String, model: String, temperature: Double) async throws -> String {
+        print("[OllamaService] Sending prompt to Ollama with model \(model) and temperature \(temperature)...")
         
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: generateUrl)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let requestBody = OllamaRequest(model: "gemma3:1b", prompt: prompt, stream: false)
+        let requestBody = OllamaRequest(
+            model: model,
+            prompt: prompt,
+            stream: false,
+            options: ["temperature": temperature]
+        )
         
-        do {
-            request.httpBody = try JSONEncoder().encode(requestBody)
-        } catch {
-            print("[OllamaService] Error: Failed to encode request body: \(error)")
-            throw error
-        }
+        request.httpBody = try JSONEncoder().encode(requestBody)
         
-        let data: Data
-        let response: URLResponse
+        let (data, response) = try await URLSession.shared.data(for: request)
         
-        do {
-            // Perform the network request.
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            // This will catch network errors like "Connection refused".
-            print("[OllamaService] Error: Network request failed: \(error.localizedDescription)")
-            throw error
-        }
-        
-        // Check for a successful HTTP status code.
         if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-            print("[OllamaService] Error: Received non-2xx HTTP status: \(httpResponse.statusCode)")
-            // Log the server's response for debugging.
-            if let responseBody = String(data: data, encoding: .utf8) {
-                print("[OllamaService] Server response: \(responseBody)")
-            }
+            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
+            print("[OllamaService] Error: Received non-2xx HTTP status: \(httpResponse.statusCode). Response: \(responseBody)")
             throw URLError(.badServerResponse)
         }
         
-        // Decode the JSON response.
+        let decodedResponse = try JSONDecoder().decode(OllamaResponse.self, from: data)
+        return self.cleanResponse(decodedResponse.response)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    // Fetches the list of available models from the Ollama API.
+    func fetchAvailableModels() async -> [String] {
+        print("[OllamaService] Fetching available models...")
         do {
-            let decodedResponse = try JSONDecoder().decode(OllamaResponse.self, from: data)
-            print("[OllamaService] Received successful response.")
-            return decodedResponse.response
+            let (data, _) = try await URLSession.shared.data(from: tagsUrl)
+            let decodedResponse = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
+            let modelNames = decodedResponse.models.map { $0.name }
+            print("[OllamaService] Found models: \(modelNames)")
+            return modelNames
         } catch {
-            print("[OllamaService] Error: Failed to decode JSON response: \(error)")
-            // Log the raw data as a string to see what we actually received.
-            if let responseBody = String(data: data, encoding: .utf8) {
-                print("[OllamaService] Raw response body: \(responseBody)")
-            }
-            throw error
+            print("[OllamaService] Error fetching or decoding models: \(error)")
+            return []
+        }
+    }
+    
+    private func cleanResponse(_ text: String) -> String {
+        do {
+            let regex = try NSRegularExpression(pattern: "<think>.*?</think>", options: .dotMatchesLineSeparators)
+            let range = NSRange(text.startIndex..., in: text)
+            return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
+        } catch {
+            print("[OllamaService] Error creating regex for cleaning: \(error)")
+            return text
         }
     }
 }

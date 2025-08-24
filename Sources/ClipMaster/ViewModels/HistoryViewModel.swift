@@ -6,17 +6,21 @@ import Combine
 @MainActor
 class HistoryViewModel: ObservableObject {
     @Published var clipItems: [ClipItem] = []
-    @Published var isProcessingOllama: Bool = false // To show a loading indicator
+    @Published var isProcessingOllama: Bool = false
     
     private let modelContext: ModelContext
     private let clipboardService: ClipboardService
     private let ollamaService: OllamaService
+    private let promptService: PromptService
+    private let settingsService: SettingsService
     private var cancellables = Set<AnyCancellable>()
     
-    init(modelContext: ModelContext, clipboardService: ClipboardService, ollamaService: OllamaService) {
+    init(modelContext: ModelContext, clipboardService: ClipboardService, ollamaService: OllamaService, promptService: PromptService, settingsService: SettingsService) {
         self.modelContext = modelContext
         self.clipboardService = clipboardService
         self.ollamaService = ollamaService
+        self.promptService = promptService
+        self.settingsService = settingsService
         fetchHistory()
         
         NotificationCenter.default
@@ -39,7 +43,6 @@ class HistoryViewModel: ObservableObject {
     
     func copyToPasteboard(item: ClipItem) {
         clipboardService.pauseMonitoring()
-        
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         
@@ -64,13 +67,17 @@ class HistoryViewModel: ObservableObject {
         
         isProcessingOllama = true
         
+        let promptTemplate = promptService.activePrompt
+        let finalPrompt = promptTemplate.replacingOccurrences(of: PromptService.clipboardPlaceholder, with: text)
+        
         do {
-            let result = try await ollamaService.generate(prompt: text)
+            let temperature = settingsService.temperature
+            let model = settingsService.selectedModel
+            let result = try await ollamaService.generate(prompt: finalPrompt, model: model, temperature: temperature)
             
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(result, forType: .string)
-            
         } catch {
             print("Error processing with Ollama: \(error)")
         }

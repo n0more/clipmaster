@@ -57,10 +57,22 @@ struct MenuBarView: View {
             viewModel.copyToPasteboard(item: itemToCopy)
             NSApp.keyWindow?.close()
             return
+        case .rightArrow: // New case for Ollama processing
+            let itemToProcess = items[selectedIndex]
+            // Ensure it's not an image before processing
+            guard itemToProcess.contentType != "public.png" else { return }
+            
+            Task {
+                await viewModel.processWithOllama(item: itemToProcess)
+                // Close the window after processing is done.
+                NSApp.keyWindow?.close()
+            }
+            return
         default:
             return
         }
         
+        // Scroll to the newly selected item.
         let selectedId = items[selectedIndex].id
         withAnimation {
             proxy.scrollTo(selectedId, anchor: .center)
