@@ -22,7 +22,7 @@ class RootContainer {
             self.accessibilityService = AccessibilityService()
             
             self.clipboardService = ClipboardService(persistenceService: self.persistenceService)
-            self.hotKeyService = HotKeyService()
+            self.hotKeyService = HotKeyService(settingsService: self.settingsService)
             self.ollamaService = OllamaService()
             
             self.historyViewModel = HistoryViewModel(

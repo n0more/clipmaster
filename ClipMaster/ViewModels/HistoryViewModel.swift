@@ -85,4 +85,17 @@ class HistoryViewModel: ObservableObject {
         
         isProcessingOllama = false
     }
+    
+    func processLastClipboardItem() async {
+        // Ensure the history is up-to-date first.
+        fetchHistory()
+        
+        guard let lastItem = clipItems.first else {
+            print("History is empty, nothing to process.")
+            return
+        }
+        
+        print("Processing the last clipboard item...")
+        await processWithOllama(item: lastItem)
+    }
 }

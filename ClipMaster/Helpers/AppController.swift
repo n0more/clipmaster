@@ -12,6 +12,7 @@ class AppController {
     private var modelSelectionWindow: NSWindow?
     private var accessibilityAlertWindow: NSWindow?
     private var ollamaURLWindow: NSWindow?
+    private var hotkeysSettingsWindow: NSWindow?
     private let container: RootContainer
     private var cancellables = Set<AnyCancellable>()
 
@@ -47,13 +48,18 @@ class AppController {
     private func buildMenu() {
         let menu = NSMenu()
         
-        // Ollama URL Item
+        // --- Settings Section ---
+        menu.addItem(NSMenuItem(title: "Settings", action: nil, keyEquivalent: ""))
+        
+        let hotkeysItem = NSMenuItem(title: "Configure Hotkeys...", action: #selector(showHotkeysSettingsWindow), keyEquivalent: "")
+        hotkeysItem.target = self
+        menu.addItem(hotkeysItem)
+        
         let urlString = "Ollama URL: \(container.settingsService.ollamaURL)"
         let urlItem = NSMenuItem(title: urlString, action: #selector(showOllamaURLWindow), keyEquivalent: "")
         urlItem.target = self
         menu.addItem(urlItem)
         
-        // Model Selection Item
         let modelString = "Model: \(container.settingsService.selectedModel.isEmpty ? "Not Set" : container.settingsService.selectedModel)"
         let modelItem = NSMenuItem(title: modelString, action: #selector(showModelSelectionWindow), keyEquivalent: "")
         modelItem.target = self
@@ -65,6 +71,7 @@ class AppController {
         menu.addItem(tempItem)
         menu.addItem(NSMenuItem.separator())
         
+        // --- Prompts Section ---
         menu.addItem(NSMenuItem(title: "Prompts", action: nil, keyEquivalent: ""))
         for prompt in container.promptService.prompts {
             let menuItem = NSMenuItem(title: prompt, action: #selector(promptSelected(_:)), keyEquivalent: "")
@@ -90,6 +97,8 @@ class AppController {
     @objc private func promptSelected(_ sender: NSMenuItem) {
         container.promptService.setActivePrompt(sender.title)
     }
+    
+    // MARK: - Window Management
     
     @objc private func showAddPromptWindow() {
         if let window = addPromptWindow, window.isVisible {
@@ -258,6 +267,37 @@ class AppController {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
+    
+    @objc private func showHotkeysSettingsWindow() {
+        if let window = hotkeysSettingsWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        NSApp.setActivationPolicy(.regular)
+        
+        let hotkeysView = HotkeysSettingsView(
+            settingsService: container.settingsService,
+            onDone: { [weak self] in
+                self?.hotkeysSettingsWindow?.close()
+                self?.hotkeysSettingsWindow = nil
+                NSApp.setActivationPolicy(.accessory)
+            }
+        )
+        
+        let hostingController = NSHostingController(rootView: hotkeysView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Configure Hotkeys"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        
+        self.hotkeysSettingsWindow = window
+        
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
 
     // MARK: - Permissions
     
@@ -290,11 +330,47 @@ class AppController {
     // MARK: - Hotkey & Window Management
     
     private func setupHotkeyListener() {
+        // This is now handled by HotKeyService, which is initialized in RootContainer.
+        // We just need to listen for the notifications.
         NotificationCenter.default
             .publisher(for: .toggleHistoryWindow)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.toggleHistoryWindowAtCursor()
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default
+            .publisher(for: .processLastItemWithOllama)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task {
+                    await self?.container.historyViewModel.processLastClipboardItem()
+                }
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default
+            .publisher(for: .selectPrompt1)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.container.promptService.setActivePrompt(byIndex: 0)
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default
+            .publisher(for: .selectPrompt2)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.container.promptService.setActivePrompt(byIndex: 1)
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default
+            .publisher(for: .selectPrompt3)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.container.promptService.setActivePrompt(byIndex: 2)
             }
             .store(in: &cancellables)
     }

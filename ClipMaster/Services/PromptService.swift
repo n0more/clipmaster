@@ -78,6 +78,15 @@ class PromptService: ObservableObject {
         savePrompts()
     }
     
+    func setActivePrompt(byIndex index: Int) {
+        guard prompts.indices.contains(index) else {
+            print("[PromptService] Error: Index \(index) is out of bounds.")
+            return
+        }
+        let newActivePrompt = prompts[index]
+        setActivePrompt(newActivePrompt)
+    }
+    
     private func savePrompts() {
         UserDefaults.standard.set(prompts, forKey: promptsKey)
     }
