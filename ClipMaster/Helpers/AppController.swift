@@ -13,6 +13,7 @@ class AppController {
     private var accessibilityAlertWindow: NSWindow?
     private var ollamaURLWindow: NSWindow?
     private var hotkeysSettingsWindow: NSWindow?
+    private var historyLimitWindow: NSWindow?
     private let container: RootContainer
     private var cancellables = Set<AnyCancellable>()
 
@@ -21,11 +22,11 @@ class AppController {
         setupStatusItem()
         setupHotkeyListener()
         
-        container.promptService.$prompts.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
-        container.promptService.$activePrompt.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
+        // Subscribe to settings that affect the menu's appearance
         container.settingsService.$temperature.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
         container.settingsService.$selectedModel.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
         container.settingsService.$ollamaURL.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
+        container.settingsService.$historyLimit.sink { [weak self] _ in self?.buildMenu() }.store(in: &cancellables)
         
         // Fetch models on startup.
         Task {
@@ -50,6 +51,10 @@ class AppController {
         
         // --- Settings Section ---
         menu.addItem(NSMenuItem(title: "Settings", action: nil, keyEquivalent: ""))
+        
+        let historyLimitItem = NSMenuItem(title: "History Limit: \(container.settingsService.historyLimit)", action: #selector(showHistoryLimitWindow), keyEquivalent: "")
+        historyLimitItem.target = self
+        menu.addItem(historyLimitItem)
         
         let hotkeysItem = NSMenuItem(title: "Configure Hotkeys...", action: #selector(showHotkeysSettingsWindow), keyEquivalent: "")
         hotkeysItem.target = self
@@ -96,6 +101,8 @@ class AppController {
     
     @objc private func promptSelected(_ sender: NSMenuItem) {
         container.promptService.setActivePrompt(sender.title)
+        // Force a menu rebuild immediately after selection
+        buildMenu()
     }
     
     // MARK: - Window Management
@@ -115,6 +122,7 @@ class AppController {
                 self?.addPromptWindow?.close()
                 self?.addPromptWindow = nil
                 NSApp.setActivationPolicy(.accessory)
+                self?.buildMenu() // Rebuild menu after adding
             },
             onCancel: { [weak self] in
                 self?.addPromptWindow?.close()
@@ -151,6 +159,7 @@ class AppController {
                 self?.setTemperatureWindow?.close()
                 self?.setTemperatureWindow = nil
                 NSApp.setActivationPolicy(.accessory)
+                self?.buildMenu() // Rebuild menu after setting temperature
             }
         )
         .environmentObject(container.settingsService)
@@ -183,6 +192,7 @@ class AppController {
                 self?.promptsSettingsWindow?.close()
                 self?.promptsSettingsWindow = nil
                 NSApp.setActivationPolicy(.accessory)
+                self?.buildMenu() // Rebuild menu after edits
             }
         )
         
@@ -298,6 +308,37 @@ class AppController {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
+    
+    @objc private func showHistoryLimitWindow() {
+        if let window = historyLimitWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        NSApp.setActivationPolicy(.regular)
+        
+        let limitView = HistoryLimitView(
+            settingsService: container.settingsService,
+            onDone: { [weak self] in
+                self?.historyLimitWindow?.close()
+                self?.historyLimitWindow = nil
+                NSApp.setActivationPolicy(.accessory)
+            }
+        )
+        
+        let hostingController = NSHostingController(rootView: limitView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Set History Limit"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        
+        self.historyLimitWindow = window
+        
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
 
     // MARK: - Permissions
     
@@ -328,6 +369,21 @@ class AppController {
     }
 
     // MARK: - Hotkey & Window Management
+
+    // Constants for dynamic height calculation, mirroring MenuBarView
+    private let rowHeight: CGFloat = 50
+    private let padding: CGFloat = 8
+    private let minHeight: CGFloat = 100
+    private let maxHeight: CGFloat = 500
+    
+    private func getCalculatedHeight() -> CGFloat {
+        let itemCount = container.historyViewModel.clipItems.count
+        if itemCount == 0 {
+            return minHeight
+        }
+        let totalHeight = (CGFloat(itemCount) * rowHeight) + (padding * 2)
+        return min(max(totalHeight, minHeight), maxHeight)
+    }
     
     private func setupHotkeyListener() {
         // This is now handled by HotKeyService, which is initialized in RootContainer.
@@ -355,6 +411,7 @@ class AppController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.container.promptService.setActivePrompt(byIndex: 0)
+                self?.buildMenu() // Rebuild menu after selection
             }
             .store(in: &cancellables)
             
@@ -363,6 +420,7 @@ class AppController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.container.promptService.setActivePrompt(byIndex: 1)
+                self?.buildMenu() // Rebuild menu after selection
             }
             .store(in: &cancellables)
             
@@ -371,6 +429,7 @@ class AppController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.container.promptService.setActivePrompt(byIndex: 2)
+                self?.buildMenu() // Rebuild menu after selection
             }
             .store(in: &cancellables)
     }
@@ -385,10 +444,22 @@ class AppController {
         } else {
             guard let window = historyWindow else { return }
             
-            var mouseLocation = NSEvent.mouseLocation
-            mouseLocation.y -= window.frame.height
+            // First, ensure the view model has the latest data
+            container.historyViewModel.fetchHistory()
             
+            // Now, calculate the correct height and resize the window
+            let newHeight = getCalculatedHeight()
+            var windowFrame = window.frame
+            windowFrame.size.height = newHeight
+            
+            // Position the window correctly below the cursor
+            var mouseLocation = NSEvent.mouseLocation
+            mouseLocation.y -= newHeight
+            mouseLocation.x -= windowFrame.size.width / 2
+            
+            window.setFrame(windowFrame, display: false)
             window.setFrameOrigin(mouseLocation)
+            
             window.makeKeyAndOrderFront(nil)
             window.makeFirstResponder(window.contentViewController?.view)
         }
@@ -400,11 +471,11 @@ class AppController {
             .modelContainer(container.persistenceService.mainContext.container)
 
         let hostingController = NSHostingController(rootView: menuView)
-        let viewSize = CGSize(width: 300, height: 400)
-        hostingController.view.frame.size = viewSize
+        // Start with a default size; it will be resized just before showing.
+        let initialSize = CGSize(width: 300, height: 400)
         
         let window = PopupPanel(
-            contentRect: NSRect(origin: .zero, size: viewSize),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

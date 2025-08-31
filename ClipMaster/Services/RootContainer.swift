@@ -16,10 +16,10 @@ class RootContainer {
 
     init() {
         do {
-            self.persistenceService = try PersistenceService()
             self.promptService = PromptService()
             self.settingsService = SettingsService()
             self.accessibilityService = AccessibilityService()
+            self.persistenceService = try PersistenceService(settingsService: self.settingsService)
             
             self.clipboardService = ClipboardService(persistenceService: self.persistenceService)
             self.hotKeyService = HotKeyService(settingsService: self.settingsService)

@@ -11,6 +11,7 @@ class SettingsService: ObservableObject {
     @Published var availableModels: [String] = []
     @Published var selectedModel: String
     @Published var ollamaURL: String
+    @Published var historyLimit: Int
     
     // Hotkey settings
     @Published var historyHotKeyKeyCode: UInt32
@@ -21,6 +22,7 @@ class SettingsService: ObservableObject {
     private let temperatureKey = "ollamaTemperature"
     private let selectedModelKey = "ollamaSelectedModel"
     private let ollamaURLKey = "ollamaURL"
+    private let historyLimitKey = "historyLimit"
     
     // UserDefaults keys for hotkeys
     private let historyHotKeyKeyCodeKey = "historyHotKeyKeyCode"
@@ -34,6 +36,7 @@ class SettingsService: ObservableObject {
         
         self.selectedModel = UserDefaults.standard.string(forKey: selectedModelKey) ?? ""
         self.ollamaURL = UserDefaults.standard.string(forKey: ollamaURLKey) ?? "http://localhost:11434"
+        self.historyLimit = UserDefaults.standard.integer(forKey: historyLimitKey, defaultValue: 20)
         
         // Load hotkey settings or set defaults
         // Default: Ctrl+Shift+K (keyCode 40)
@@ -43,6 +46,12 @@ class SettingsService: ObservableObject {
         // Default: Ctrl+Shift+R (keyCode 15)
         self.processHotKeyKeyCode = UInt32(UserDefaults.standard.integer(forKey: processHotKeyKeyCodeKey, defaultValue: 15))
         self.processHotKeyModifiers = UInt(UserDefaults.standard.integer(forKey: processHotKeyModifiersKey, defaultValue: Int(NSEvent.ModifierFlags.control.rawValue | NSEvent.ModifierFlags.shift.rawValue)))
+    }
+    
+    func setHistoryLimit(_ limit: Int) {
+        self.historyLimit = max(1, limit) // Ensure limit is at least 1
+        UserDefaults.standard.set(self.historyLimit, forKey: historyLimitKey)
+        print("[SettingsService] History limit set to: \(self.historyLimit)")
     }
     
     func setHistoryHotKey(keyCode: UInt32, modifiers: NSEvent.ModifierFlags) {

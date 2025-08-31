@@ -15,13 +15,14 @@ enum PersistenceError: Error {
 @MainActor
 class PersistenceService {
     private let modelContainer: ModelContainer
-    private let historyLimit = 20 // Keep the 20 most recent items.
+    private let settingsService: SettingsService
     
     var mainContext: ModelContext {
         modelContainer.mainContext
     }
 
-    init() throws {
+    init(settingsService: SettingsService) throws {
+        self.settingsService = settingsService
         do {
             let configuration = ModelConfiguration(for: ClipItem.self)
             self.modelContainer = try ModelContainer(for: ClipItem.self, configurations: configuration)
@@ -67,8 +68,9 @@ class PersistenceService {
             let descriptor = FetchDescriptor<ClipItem>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
             let allItems = try mainContext.fetch(descriptor)
             
-            if allItems.count > historyLimit {
-                let itemsToDelete = allItems.dropFirst(historyLimit)
+            let limit = settingsService.historyLimit
+            if allItems.count > limit {
+                let itemsToDelete = allItems.dropFirst(limit)
                 for item in itemsToDelete {
                     print("[PersistenceService] Trimming old item.")
                     mainContext.delete(item)

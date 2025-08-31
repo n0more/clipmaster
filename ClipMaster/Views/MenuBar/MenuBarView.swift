@@ -6,26 +6,49 @@ struct MenuBarView: View {
     @FocusState private var isListFocused: Bool
     @State private var selectedIndex: Int = 0
 
+    // Constants for dynamic height calculation
+    private let rowHeight: CGFloat = 50
+    private let padding: CGFloat = 8
+    private let minHeight: CGFloat = 100
+    private let maxHeight: CGFloat = 500
+    
+    private var calculatedHeight: CGFloat {
+        let itemCount = viewModel.clipItems.count
+        if itemCount == 0 {
+            return minHeight
+        }
+        let totalHeight = (CGFloat(itemCount) * rowHeight) + (padding * 2)
+        return min(max(totalHeight, minHeight), maxHeight)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Clipboard History")
-                .font(.headline)
-                .padding([.leading, .top, .trailing])
-
             if viewModel.clipItems.isEmpty {
-                Text("History is empty.")
-                    .foregroundColor(.secondary)
-                    .padding()
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text("History is empty.")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    Spacer()
+                }
             } else {
                 ScrollViewReader { scrollViewProxy in
                     ScrollView {
-                        ForEach(Array(viewModel.clipItems.enumerated()), id: \.element.id) { index, item in
-                            // Pass the ViewModel to the row
-                            ClipItemRow(item: item, viewModel: viewModel)
-                                .background(selectedIndex == index ? Color.accentColor : Color.clear)
-                                .cornerRadius(4)
-                                .id(item.id)
+                        // Add some padding at the top of the scroll view
+                        VStack(spacing: 0) {
+                            ForEach(Array(viewModel.clipItems.enumerated()), id: \.element.id) { index, item in
+                                ClipItemRow(item: item, viewModel: viewModel)
+                                    .frame(height: rowHeight)
+                                    .background(selectedIndex == index ? Color.accentColor.opacity(0.3) : Color.clear)
+                                    .cornerRadius(4)
+                                    .id(item.id)
+                            }
                         }
+                        .padding(.horizontal, padding)
+                        .padding(.vertical, padding)
                     }
                     .focusable()
                     .focused($isListFocused)
@@ -36,11 +59,13 @@ struct MenuBarView: View {
                 }
             }
         }
+        .background(Material.regular) // Make the background opaque and light/dark adaptive
+        .cornerRadius(8) // Add rounded corners to the window
         .onAppear {
             viewModel.fetchHistory()
             isListFocused = true
         }
-        .frame(width: 300, height: 400)
+        .frame(width: 300, height: calculatedHeight) // Use the dynamic height
     }
     
     private func handleKeyPress(_ press: KeyPress, proxy: ScrollViewProxy) {

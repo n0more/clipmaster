@@ -19,6 +19,9 @@ struct ModelSelectionView: View {
                     }
                 }
                 .pickerStyle(MenuPickerStyle())
+                .onChange(of: settingsService.selectedModel) { newModel in
+                    settingsService.setSelectedModel(newModel)
+                }
             }
             
             HStack {

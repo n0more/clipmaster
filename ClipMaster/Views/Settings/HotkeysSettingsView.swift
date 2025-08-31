@@ -33,8 +33,19 @@ struct HotkeysSettingsView: View {
             
             HStack {
                 Spacer()
-                Button("Done", action: onDone)
-                    .keyboardShortcut(.defaultAction)
+                Button("Done") {
+                    // Explicitly call the save methods before closing
+                    settingsService.setHistoryHotKey(
+                        keyCode: settingsService.historyHotKeyKeyCode,
+                        modifiers: NSEvent.ModifierFlags(rawValue: settingsService.historyHotKeyModifiers)
+                    )
+                    settingsService.setProcessHotKey(
+                        keyCode: settingsService.processHotKeyKeyCode,
+                        modifiers: NSEvent.ModifierFlags(rawValue: settingsService.processHotKeyModifiers)
+                    )
+                    onDone()
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding()

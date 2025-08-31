@@ -49,7 +49,14 @@ class PromptService: ObservableObject {
     }
     
     func setActivePrompt(_ prompt: String) {
-        guard prompts.contains(prompt) else { return }
+        guard prompts.contains(prompt) else {
+            // If the prompt is not in the list, default to the first one.
+            let newActivePrompt = prompts.first ?? ""
+            activePrompt = newActivePrompt
+            UserDefaults.standard.set(newActivePrompt, forKey: activePromptKey)
+            print("[PromptService] Active prompt reset to: \(newActivePrompt)")
+            return
+        }
         activePrompt = prompt
         UserDefaults.standard.set(activePrompt, forKey: activePromptKey)
         print("[PromptService] Active prompt set to: \(activePrompt)")
@@ -63,6 +70,7 @@ class PromptService: ObservableObject {
         if let index = prompts.firstIndex(of: old) {
             prompts[index] = new
             if activePrompt == old {
+                // This will now correctly save the new value
                 setActivePrompt(new)
             }
             savePrompts()
@@ -72,8 +80,8 @@ class PromptService: ObservableObject {
     func deletePrompt(_ prompt: String) {
         prompts.removeAll { $0 == prompt }
         if activePrompt == prompt {
-            activePrompt = prompts.first ?? ""
-            UserDefaults.standard.set(activePrompt, forKey: activePromptKey)
+            // This will now correctly save the new default value
+            setActivePrompt(prompts.first ?? "")
         }
         savePrompts()
     }
